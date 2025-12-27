@@ -9,21 +9,21 @@ import requests
 from requests import Session
 from requests.exceptions import RequestException
 
-try:  # Optional enrichment dependency
+try:
     import phonenumbers
     from phonenumbers.phonenumberutil import NumberParseException, region_code_for_country_code
-except ImportError:  # pragma: no cover - fallback when lib missing
+except ImportError:
     phonenumbers = None
 
     class NumberParseException(Exception):
-        """Fallback exception when phonenumbers is unavailable."""
+        pass
 
     def region_code_for_country_code(_: int) -> Optional[str]:
         return None
 
-try:  # Optional enrichment dependency
+try:
     import pycountry
-except ImportError:  # pragma: no cover
+except ImportError:
     pycountry = None
 
 
@@ -49,22 +49,34 @@ LOOKUP_HEADERS = {
 }
 DEFAULT_TIMEOUT = 15
 
+# ===================== TERMINAL BANNER =====================
+def print_banner() -> None:
+    banner = r"""
+   ██████╗ ██╗  ██╗ ██████╗ ███████╗████████╗██╗ ██████╗ 
+  ██╔════╝ ██║  ██║██╔═══██╗██╔════╝╚══██╔══╝██║██╔════╝ 
+  ██║  ███╗███████║██║   ██║███████╗   ██║   ██║██║  ███╗
+  ██║   ██║██╔══██║██║   ██║╚════██║   ██║   ██║██║   ██║
+  ╚██████╔╝██║  ██║╚██████╔╝███████║   ██║   ██║╚██████╔╝
+   ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   ╚═╝ ╚═════╝ 
+
+        GhostIG — Silent Instagram OSINT
+        Made by h4cker_fawad
+============================================================
+"""
+    print(banner)
+# ==========================================================
 
 class InstagramAPIError(RuntimeError):
-    """Base error for Instagram API interactions."""
-
+    pass
 
 class NotFoundError(InstagramAPIError):
-    """Raised when a user cannot be found."""
-
+    pass
 
 class RateLimitError(InstagramAPIError):
-    """Raised when Instagram returns a rate-limit response."""
-
+    pass
 
 class InvalidInputError(InstagramAPIError):
-    """Raised when the CLI receives invalid input."""
-
+    pass
 
 @dataclass
 class UserProfile:
@@ -112,7 +124,6 @@ class UserProfile:
             hd_profile_pic_url=(payload.get("hd_profile_pic_url_info") or {}).get("url"),
         )
 
-
 @dataclass
 class LookupInsight:
     message: Optional[str]
@@ -130,7 +141,6 @@ class LookupInsight:
     def has_data(self) -> bool:
         return any([self.message, self.obfuscated_email, self.obfuscated_phone])
 
-
 class InstagramClient:
     def __init__(self, session_id: str, timeout: int = DEFAULT_TIMEOUT):
         if not session_id:
@@ -144,7 +154,6 @@ class InstagramClient:
             user_id = self._fetch_user_id(search)
         else:
             user_id = self._normalize_user_id(search)
-
         return self._fetch_profile_by_id(user_id)
 
     def advanced_lookup(self, username: str) -> LookupInsight:
@@ -160,17 +169,12 @@ class InstagramClient:
         return LookupInsight.from_payload(payload)
 
     def _fetch_user_id(self, username: str) -> str:
-        if not username:
-            raise InvalidInputError("Username cannot be empty.")
         payload = self._request(
             "GET",
             f"{WEB_PROFILE_URL}?username={username}",
             headers=WEB_PROFILE_HEADERS,
         )
-        try:
-            return payload["data"]["user"]["id"]
-        except KeyError as exc:
-            raise InstagramAPIError("Unexpected response: missing user id.") from exc
+        return payload["data"]["user"]["id"]
 
     def _fetch_profile_by_id(self, user_id: str) -> UserProfile:
         payload = self._request(
@@ -178,48 +182,25 @@ class InstagramClient:
             USER_INFO_URL.format(user_id=user_id),
             headers=USER_INFO_HEADERS,
         )
-        user_data = payload.get("user")
-        if not user_data:
-            raise InstagramAPIError("Instagram did not return user data.")
-        return UserProfile.from_payload(user_data, user_id)
+        return UserProfile.from_payload(payload["user"], user_id)
 
     def _normalize_user_id(self, user_id: str) -> str:
-        try:
-            return str(int(user_id))
-        except (TypeError, ValueError) as exc:
-            raise InvalidInputError("User ID must be numeric.") from exc
+        return str(int(user_id))
 
     def _request(self, method: str, url: str, *, headers: Dict[str, str], data: Optional[str] = None) -> Dict[str, Any]:
-        try:
-            response = self.session.request(
-                method,
-                url,
-                headers=headers,
-                data=data,
-                timeout=self.timeout,
-            )
-        except RequestException as exc:
-            raise InstagramAPIError("Unable to reach Instagram. Check your connection.") from exc
+        response = self.session.request(method, url, headers=headers, data=data, timeout=self.timeout)
 
         if response.status_code == 404:
             raise NotFoundError("User not found.")
         if response.status_code == 429:
-            raise RateLimitError("Instagram rate limit reached. Try again later.")
+            raise RateLimitError("Rate limit reached.")
         if response.status_code >= 400:
-            raise InstagramAPIError(f"Instagram returned HTTP {response.status_code}.")
+            raise InstagramAPIError(f"HTTP {response.status_code}")
 
-        if not response.content:
-            return {}
-
-        try:
-            return response.json()
-        except JSONDecodeError as exc:
-            raise InstagramAPIError("Instagram responded with invalid JSON.") from exc
-
+        return response.json() if response.content else {}
 
 def bool_label(value: bool) -> str:
     return "Yes" if value else "No"
-
 
 def format_phone(country_code: Optional[str], number: Optional[str]) -> Optional[str]:
     if not country_code or not number:
@@ -234,7 +215,6 @@ def format_phone(country_code: Optional[str], number: Optional[str]) -> Optional
     except (NumberParseException, AttributeError, KeyError):
         return raw
 
-
 def render_rows(rows: Dict[str, Optional[str]]) -> str:
     filtered = {k: v for k, v in rows.items() if v not in (None, "", [])}
     if not filtered:
@@ -242,12 +222,10 @@ def render_rows(rows: Dict[str, Optional[str]]) -> str:
     width = max(len(key) for key in filtered)
     return "\n".join(f"{key:<{width}} : {value}" for key, value in filtered.items())
 
-
 def format_biography(text: str) -> str:
     if not text:
         return "  -"
     return textwrap.indent(text.strip(), "  ")
-
 
 def print_profile(profile: UserProfile, lookup: Optional[LookupInsight]) -> None:
     rows = {
@@ -283,7 +261,6 @@ def print_profile(profile: UserProfile, lookup: Optional[LookupInsight]) -> None
     print(format_biography(profile.biography))
     print("=" * 60)
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Lightweight Instagram OSINT helper. Provide a session id and a username or numeric id."
@@ -292,21 +269,17 @@ def parse_args() -> argparse.Namespace:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-u", "--username", help="Instagram username to inspect.")
     group.add_argument("-i", "--id", help="Numeric Instagram user ID to inspect.")
-    parser.add_argument(
-        "--skip-lookup",
-        action="store_true",
-        help="Skip the secondary lookup request (avoids extra API traffic).",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Print the collected data as formatted JSON instead of human-readable text.",
-    )
+    parser.add_argument("--skip-lookup", action="store_true", help="Skip secondary lookup request.")
+    parser.add_argument("--json", action="store_true", help="Print data as formatted JSON.")
     return parser.parse_args()
-
 
 def main() -> None:
     args = parse_args()
+
+    # Print banner only for human-readable output
+    if not args.json:
+        print_banner()
+
     client = InstagramClient(args.sessionid)
     search_type = "id" if args.id else "username"
     search_value = args.id or args.username
@@ -318,15 +291,11 @@ def main() -> None:
         raise SystemExit(str(exc)) from exc
 
     if args.json:
-        payload = {
-            "profile": asdict(profile),
-            "lookup": asdict(lookup) if lookup else None,
-        }
+        payload = {"profile": asdict(profile), "lookup": asdict(lookup) if lookup else None}
         print(dumps(payload, indent=2))
         return
 
     print_profile(profile, lookup)
-
 
 if __name__ == "__main__":
     main()
