@@ -1,0 +1,6 @@
+# Required dependencies
+requests>=2.0.0
+
+# Optional dependencies (for phone/country enrichment)
+# pip install phonenumbers>=8.12.0
+# pip install pycountry>=22.3.5
